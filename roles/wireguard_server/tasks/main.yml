@@ -1,0 +1,54 @@
+---
+
+- name: perform updates
+  become: true
+  block:
+    - name: Add specified WireGuard repo into sources list
+      ansible.builtin.apt_repository:
+        repo: ppa:wireguard/wireguard
+        state: present
+
+    - name: Apt Update
+      ansible.builtin.apt:
+        update-cache: true
+
+    - name: install the latest version of basic toolset
+      ansible.builtin.package:
+        name: "{{ item }}"
+        state: "latest"
+      with_items:
+        - "wireguard"
+
+    - name: install the latest version of basic toolset
+      ansible.builtin.package:
+        name: "{{ item }}"
+        state: "absent"
+      with_items:
+        - "dnsmasq"
+
+    - name: Add modules
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - "wireguard"
+        - "iptable_nat"
+        - "ip6table_nat"
+
+    - ansible.posix.sysctl:
+        name: "{{ item }}"
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
+      with_items:
+        - "net.ipv4.ip_forward"
+        - "net.ipv6.conf.all.forwarding"
+
+    - name: Rollout WireGuard manager “SubSpace” as Docker container
+      ansible.builtin.import_role:
+        name: docker_stack
+      vars:
+        stack:
+
+...

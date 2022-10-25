@@ -98,6 +98,7 @@
       curl -L "https://github.com/docker/compose/releases/download/${dlVersion##*/}/docker-compose-$( uname -s )-$( uname -m )" > {{ compose_bin_location }}
       # change execution permissions
       chmod +x {{ compose_bin_location }}
+  when: installDockerCompose | default(true)
 
 - name: Set pull credentials as root user
   become: true
@@ -177,5 +178,8 @@
         dest: "/usr/local/bin/docker-compose"
         mode: "u+x,g+x"
   when: installDockerCompose | default(true)
+
+# - name: install wireguard server
+#   when:
 
 ...
