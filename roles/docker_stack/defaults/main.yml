@@ -133,6 +133,7 @@ postgres_cnt:
     - "{{ stack.database_network | default ( database_network ) }}"
   volumes:
     - "{{ workstack.name }}_postgres_data:/var/lib/postgresql/data"
+    - "{{ workstack.name }}_postgres_startup_config:/docker-entrypoint-initdb.d"
   labels:
     traefik.enable: "false"
   env:
