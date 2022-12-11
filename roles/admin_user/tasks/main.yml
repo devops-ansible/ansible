@@ -118,6 +118,7 @@
       when:
         - "item.name not in admin_usernames"
         - "item.name != lookup( 'env', 'USER' )"
+        - "item.name != ansible_ssh_user"
 
     # The SSH keys for admin users / SSH users are stored within the file
     # `$Home/.ssh/authorized_keys` for each user by default. To centralize that
