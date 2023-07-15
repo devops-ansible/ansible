@@ -7,7 +7,7 @@
 
 postgres_version:     "{{ stack.postgres_version | default ('13') }}"
 mysql_version:        "{{ stack.mysql_version    | default ('5.7') }}"
-mdb_version:          "{{ stack.mdb_version      | default ('latest') }}"
+mdb_version:          "{{ stack.mdb_version      | default ('10') }}"
 
 docker_home: "/data/docker"
 
