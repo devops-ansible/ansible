@@ -18,19 +18,19 @@
   tasks:
 
     - name: 'get current hostname fqdn of the server'
-      set_fact:
+      ansible.builtin.set_fact:
         fqdn_hn: "{{ alias_fqdn | default( ansible_host ) | lower }}"
 
     - name: 'set hostname variable'
-      set_fact:
+      ansible.builtin.set_fact:
         hostname_var: "{{ fqdn_hn.split('.')[0] }}"
 
     - name: 'change hostname'
-      hostname:
+      ansible.builtin.hostname:
         name: "{{ hostname_var }}"
 
     - name: 'ensure local route in /etc/hosts'
-      shell: 'if ! grep -q -e "127\.0\.[0-1]\.1\s*{{ hostname_var }}" /etc/hosts ; then echo "127.0.1.1       {{ hostname_var }}" >> /etc/hosts ; echo "changed"; else echo "ok" ; fi'
+      ansible.builtin.shell: 'if ! grep -q -e "127\.0\.[0-1]\.1\s*{{ hostname_var }}" /etc/hosts ; then echo "127.0.1.1       {{ hostname_var }}" >> /etc/hosts ; echo "changed"; else echo "ok" ; fi'
       register: hostchanged
       changed_when:
         - '"changed" in hostchanged.stdout'
@@ -38,11 +38,11 @@
         - hostchanged.rc != 0
 
     - name: 'Ensure timezone is set correct'
-      include_role:
+      ansible.builtin.include_role:
         name: timezone
 
     - name: additional mountpoints to be established
-      mount:
+      ansible.posix.mount:
         backup: "{{ item.backup | default( yes ) }}"
         fstype: "{{ item.fstype }}"
         path:   "{{ item.path }}"
@@ -54,45 +54,43 @@
         - mountpoints | length > 0
 
     - name: 'apt update - since Ansible could not do anything without this command ...'
-      command:
-        cmd:  'apt-get update'
-        warn: no
-      become: yes
+      ansible.builtin.shell: 'apt-get update'
+      become: true
 
     - name: 'update Server'
-      include_role:
+      ansible.builtin.include_role:
         name: update_server
       vars:
         override_user: 'yes'
         skip_update_reboot: yes
 
     - name: 'roll out Message of the Day'
-      include_role:
+      ansible.builtin.include_role:
         name: motd_server
       when: motd_active is defined and motd_active
 
     - name: 'install sophos antivirus'
-      include_role:
+      ansible.builtin.include_role:
         name: sophos_install
       when:
         - sophos_av_url is defined
         - sophos_av_url | length > 0
 
     - name: 'install basic toolset and configuration'
-      include_role:
+      ansible.builtin.include_role:
         name: install_basics
 
     - name: 'install docker tools'
-      include_role:
+      ansible.builtin.include_role:
         name: docker_host
       when: docker_host is defined and docker_host
 
     - name: 'create users and give permissions'
-      include_role:
+      ansible.builtin.include_role:
         name: admin_user
 
     - name: 'configure basic firewall'
-      include_role:
+      ansible.builtin.include_role:
         name: firewall
       vars:
         install_ufw:   "yes"
@@ -101,23 +99,23 @@
         enable_ufw:    "no"
 
     - name: 'execute additional installation roles'
-      include_role:
+      ansible.builtin.include_role:
         name: "{{ item.role }}"
       vars:
         role_vars: "{{ item.vars }}"
       with_items: "{{ additional_roles_on_install | default([]) }}"
 
     - name: 'create logrotate config'
-      include_role:
+      ansible.builtin.include_role:
         name: logrotate
       when: logrotate is defined
 
     - name: 'install SSH server things and permit users to login via SSH'
-      include_role:
+      ansible.builtin.include_role:
         name: ssh_server
 
     - name: 'configure basic firewall'
-      include_role:
+      ansible.builtin.include_role:
         name: firewall
       vars:
         install_ufw:   "no"
@@ -126,13 +124,13 @@
         enable_ufw:    "yes"
 
     - name: 'DEBUG: Wait for user to continue'
-      pause:
+      ansible.builtin.pause:
         prompt: "Should we continue with the reboot? (yes/no - default: yes)"
       register: continue_reboot
       when: ( debug is defined and debug )
 
     - name: 'Fail if user skipps'
-      fail:
+      ansible.builtin.fail:
         msg: 'User aborted the run'
       when: debug is defined and
             debug and
@@ -140,8 +138,8 @@
             not ( continue_reboot.user_input | bool )
 
     - name: reboot
-      reboot:
+      ansible.builtin.reboot:
         reboot_timeout: 300
-      ignore_errors: yes
+      ignore_errors: true
 
 ...
