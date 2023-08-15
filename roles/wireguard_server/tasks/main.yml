@@ -51,6 +51,16 @@
         - "wgui.path"
         - "wgui.service"
 
+    - name: Enable routing on the server
+      ansible.posix.sysctl:
+        name: "{{ item }}"
+        value: '1'
+        sysctl_file: /etc/sysctl.d/99_wg.conf
+        reload: true
+      with_items:
+        - "net.ipv4.ip_forward"
+        - "net.ipv6.conf.all.forwarding"
+
     - name: Enable and start Wireguard UI services
       ansible.builtin.service:
         state: "started"

@@ -1,5 +1,8 @@
 ---
 
+post_up: "iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE; ip6tables -t nat -A POSTROUTING -o ens3 -j MASQUERADE"
+post_down: "iptables -t nat -D POSTROUTING -o ens3 -j MASQUERADE; ip6tables -t nat -D POSTROUTING -o ens3 -j MASQUERADE"
+
 wireguard_ui_stack:
   name: "wireguard"
   containers:
@@ -39,7 +42,7 @@ wireguard_ui_stack:
         WGUI_MTU: "{{ wireguard_ui.mtu | default('1450') }}"
         WGUI_DEFAULT_CLIENT_ALLOWED_IPS: "{{ wireguard_ui.allowed_ips | default('0.0.0.0/0, ::/0') }}"
         WGUI_DEFAULT_CLIENT_EXTRA_ALLOWED_IPS: "{{ wireguard_ui.extra_allowed_ips | default('') }}"
-        WGUI_SERVER_POST_DOWN_SCRIPT: "{{ wireguard_ui.post_down | default('') }}"
-        WGUI_SERVER_POST_UP_SCRIPT: "{{ wireguard_ui.post_up | default('') }}"
+        WGUI_SERVER_POST_DOWN_SCRIPT: "{{ wireguard_ui.post_down | default( post_up ) }}"
+        WGUI_SERVER_POST_UP_SCRIPT: "{{ wireguard_ui.post_up | default( post_down ) }}"
 
 ...
