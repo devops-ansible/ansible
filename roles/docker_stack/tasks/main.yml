@@ -80,7 +80,7 @@
 
 # finally call docker_container role for every container that has to be controlled
 - name: 'Create and manage containers for the Docker stack.'
-  include_role:
+  ansible.builtin.include_role:
     name: docker_container
   with_items: "{{ stackitems }}"
   loop_control:
