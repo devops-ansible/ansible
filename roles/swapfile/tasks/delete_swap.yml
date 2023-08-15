@@ -2,7 +2,7 @@
 
 - name: Delete swap from fstab
   lineinfile:
-    dest: /etc/fstab 
+    dest: /etc/fstab
     line: "{{ swapfile }} none swap defaults 0 0"
     state: absent
 

@@ -17,7 +17,7 @@
 - name: Ensure directories exist
   file:
     path:  "/home/{{ user }}/.aws"
-    state: directory 
+    state: directory
     owner: "{{ user }}"
     group: "{{ user }}"
     mode:  0700

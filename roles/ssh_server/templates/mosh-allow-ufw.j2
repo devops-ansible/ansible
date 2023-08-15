@@ -9,7 +9,7 @@ touch $LOGFILE
 # this script is to run as sudo – so do not forget to
 # allow passwordless sudo for every ssh user!
 if [[ $EUID -ne 0 ]]; then
-   exit 1
+    exit 1
 fi
 
 # only run port opening if not running a cleanup job
