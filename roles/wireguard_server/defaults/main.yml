@@ -1,0 +1,45 @@
+---
+
+wireguard_ui_stack:
+  name: "wireguard"
+  containers:
+    - repository: "ngoduykhanh"
+      image: "wireguard-ui"
+      version: "latest"
+      name: "ui"
+      traefik: true
+      traefik_port: "5000"
+      network_mode: "host"
+      capabilities:
+        - "NET_ADMIN"
+      fqdn:
+        - "{{ wireguard_ui.http_host }}"
+      directories:
+        - [[ "db", "/app/db" ]]
+      volumes:
+        - "/etc/wireguard:/etc/wireguard"
+      env:
+        EMAIL_FROM_ADDRESS: "{{ wireguard_ui.mail | default('') }}"
+        EMAIL_FROM_NAME: "{{ wireguard_ui.mail_name | default('') }}"
+        SMTP_HOSTNAME: "{{ wireguard_ui.smtp_host | default('127.0.0.1') }}"
+        SMTP_PORT: "{{ wireguard_ui.smtp_port | default('25') }}"
+        SMTP_USERNAME: "{{ wireguard_ui.smtp_user | default('') }}"
+        SMTP_PASSWORD: "{{ wireguard_ui.smtp_password | default('') }}"
+        SMTP_AUTH_TYPE: "{{ wireguard_ui.smtp_auth | default('PLAIN') }}"
+        SMTP_ENCRYPTION: "{{ wireguard_ui.smtp_encryption | default('STARTTLS') }}"
+        SESSION_SECRET: "{{ wireguard_ui.secret | default('') }}"
+        WGUI_USERNAME: "{{ wireguard_ui.init_user | default('admin') }}"
+        WGUI_PASSWORD: "{{ wireguard_ui.init_password | default('admin') }}"
+        WGUI_PERSISTENT_KEEPALIVE: "{{ wireguard_ui.persistent_keepalive | default('15') }}"
+        WGUI_MANAGE_START: "{{ wireguard_ui.start | default('true') }}"
+        WGUI_MANAGE_RESTART: "{{ wireguard_ui.restart | default('true') }}"
+        WGUI_SERVER_LISTEN_PORT: "{{ wireguard_ui.port | default('51820') }}"
+        WGUI_SERVER_INTERFACE_ADDRESSES: "{{ wireguard_ui.interface_addresses | default('10.252.1.1/24') }}"
+        WGUI_DNS: "{{ wireguard_ui.nameservers | default('1.1.1.1') }}"
+        WGUI_MTU: "{{ wireguard_ui.mtu | default('1450') }}"
+        WGUI_DEFAULT_CLIENT_ALLOWED_IPS: "{{ wireguard_ui.allowed_ips | default('0.0.0.0/0, ::/0') }}"
+        WGUI_DEFAULT_CLIENT_EXTRA_ALLOWED_IPS: "{{ wireguard_ui.extra_allowed_ips | default('') }}"
+        WGUI_SERVER_POST_DOWN_SCRIPT: "{{ wireguard_ui.post_down | default('') }}"
+        WGUI_SERVER_POST_UP_SCRIPT: "{{ wireguard_ui.post_up | default('') }}"
+
+...

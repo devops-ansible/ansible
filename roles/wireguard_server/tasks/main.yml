@@ -1,17 +1,8 @@
 ---
 
-- name: perform updates
+- name: install WireGuard
   become: true
   block:
-    - name: Add specified WireGuard repo into sources list
-      ansible.builtin.apt_repository:
-        repo: ppa:wireguard/wireguard
-        state: present
-
-    - name: Apt Update
-      ansible.builtin.apt:
-        update-cache: true
-
     - name: install the latest version of basic toolset
       ansible.builtin.package:
         name: "{{ item }}"
@@ -45,10 +36,30 @@
         - "net.ipv4.ip_forward"
         - "net.ipv6.conf.all.forwarding"
 
-    - name: Rollout WireGuard manager “SubSpace” as Docker container
+    - name: Rollout WireGuard manager UI as Docker container
       ansible.builtin.import_role:
         name: docker_stack
       vars:
-        stack:
+        stack: "{{ wireguard_ui_stack }}"
+
+    - name: Deploy WireGuard UI service files to host to restart
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: '0644'
+      with_items:
+        - "wgui.path"
+        - "wgui.service"
+
+    - name: Enable and start Wireguard UI services
+      ansible.builtin.service:
+        state: "started"
+        enabled: true
+        name: "{{ item }}"
+      with_items:
+        - "wgui.path"
+        - "wgui.service"
+        - "wg-quick@wg0.service"
+
 
 ...
