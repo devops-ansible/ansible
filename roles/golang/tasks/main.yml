@@ -1,0 +1,136 @@
+---
+
+# following along the official install guide at https://go.dev/doc/install
+
+- name: "go lang version check"
+  ansible.builtin.shell:
+    cmd: |
+      set -x
+      . /etc/profile
+      _goversrx="^.*(go[0-9]+\.[0-9]+\.[0-9]+).*$"
+      goloc="$( which go )"
+      echo ${goloc}
+      if [ $? == 0 ]; then
+        current=$( go version | sed -E "s/${_goversrx}/\1/g" )
+      fi
+      set -ex
+      latest=$( curl -L https://golang.org/VERSION?m=text | grep -E ${_goversrx} )
+      installversion=$( echo "{{ golang_version }}" | tr '[:upper:]' '[:lower:]' )
+      if [ "${installversion}" = "latest" ] || ! [[ "$installversion" =~ ${_goversrx} ]]; then
+        tobeinstalled="${latest}"
+      else
+        tobeinstalled="${installversion}"
+      fi
+      dlname="${tobeinstalled}.linux-{{ containerd_arch }}.tar.gz"
+      # TODO: which go => check below when placing /etc/profile if valid golang_path!
+      jq -c --null-input \
+        --arg cur "${current:-}" \
+        --arg tobeinstalled "${tobeinstalled}" \
+        --arg latest "${latest}" \
+        --arg dlname "${dlname}" \
+        --arg goloc "${goloc}" \
+        '{"current": $cur, "tobeinstalled": $tobeinstalled, "dlname": $dlname, "latest": $latest, "goloc": $goloc}'
+  args:
+    executable: "/usr/bin/bash"
+  register: goversion
+  changed_when: goversion.stdout_lines[-1] | from_json | json_query('current') != goversion.stdout_lines[-1] | from_json | json_query('tobeinstalled')
+
+- name: "install GOlang"
+  become: true
+  when:
+    - goversion.changed
+
+  block:
+
+    - name: "Prepare download folder"
+      ansible.builtin.tempfile:
+        state: "directory"
+        suffix: "_golang"
+      changed_when: false
+      register: "tmp_dl_dir"
+      when: not keep_goinstall
+
+    - name: "Actual json object"
+      ansible.builtin.set_fact:
+        gojson: "{{ goversion.stdout_lines[-1] | from_json }}"
+        dl_path: "{{ tmp_dl_dir.path | default( keep_dir ) }}"
+
+    - name: "Break if non-Ansible Go installation is present"
+      ansible.builtin.fail:
+        msg: |
+          Your system seems to have a non-Ansible managed Go Lang installation at `{{ gojson.goloc }}`.
+          Please remove and re-run your current call!
+      when:
+        - gojson.goloc != ""
+        - not gojson.goloc is match( "^" ~ golang_path )
+
+    - name: "build checksum XPath"
+      ansible.builtin.set_fact:
+        checksum_xpath: "//a[text()='{{ gojson.dlname }}']/../../td[last()]/descendant::*/text()"
+
+    - name: "fetch checksum"
+      ansible.builtin.set_fact:
+        checksum: "{{ ( lookup('ansible.builtin.url', 'https://go.dev/dl/', wantlist=False) | text_by_xpath( checksum_xpath ) )[0] }}"
+
+    - name: "Create install file keeping directory at {{ keep_dir }}"
+      ansible.builtin.file:
+        path:  "{{ keep_dir }}"
+        state: "directory"
+        mode:  "0755"
+        owner: "root"
+        group: "root"
+      when: keep_goinstall
+
+    - name: 'Download go lang with version {{ gojson["tobeinstalled"] }}'
+      get_url:
+        url: 'https://go.dev/dl/{{ gojson["dlname"] }}'
+        dest: "{{ dl_path }}/{{ dl_file }}"
+        owner: "root"
+        group: "root"
+        mode: "0644"
+      changed_when: false
+
+    - name: "Fetch file stats of downloaded file"
+      ansible.builtin.stat:
+        path: "{{ dl_path }}/{{ dl_file }}"
+        checksum_algorithm: "sha256"
+      register: dlstats
+
+    - name: "Fail if Checksum-Missmatch"
+      ansible.builtin.fail:
+        msg: |
+          The checksum of the downloaded file differs from the one we expected!
+          Go Website let us expect: {{ checksum }}
+          ... but we got            {{ dlstats.stat.checksum }}
+      when:
+        - checksum != dlstats.stat.checksum
+
+    - name: "Clean up existing installation at {{ golang_path }}"
+      ansible.builtin.file:
+        path:  "{{ golang_path }}"
+        state: "absent"
+
+    - name: "unarchive binaries"
+      ansible.builtin.unarchive:
+        src: "{{ dl_path }}/{{ dl_file }}"
+        remote_src: true
+        dest: "{{ golang_path | dirname }}"
+
+    - name: "ensure golang bin files in PATH"
+      ansible.builtin.blockinfile:
+        path: /etc/profile
+        marker: "# {mark} ANSIBLE MANAGED BLOCK (role {{ ansible_role_name }})"
+        block: |
+          export PATH="$PATH:{{ golang_path }}/bin"
+        create: true
+
+  always:
+
+    - name: Clean temporary directory
+      ansible.builtin.file:
+        path: "{{ tmp_dl_dir.path }}"
+        state: absent
+      changed_when: false
+      when: tmp_dl_dir.path is defined
+
+...

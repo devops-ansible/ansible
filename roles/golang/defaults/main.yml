@@ -1,0 +1,12 @@
+---
+
+golang_version: "latest"
+# golang_version: "go1.21.0"
+
+golang_path: "/usr/local/go"
+
+keep_goinstall: false
+keep_dir: "/root/.install"
+dl_file: "go.tar.gz"
+
+...
