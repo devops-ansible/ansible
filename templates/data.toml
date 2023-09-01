@@ -1,0 +1,10 @@
+# {{ ansible_managed }}
+{% if pre_toml | default( false ) %}
+
+{{ pre_toml | default("") }}
+{% endif %}
+{{ data | to_toml }}
+{% if post_toml | default( false ) %}
+
+{{ post_toml | default("") }}
+{% endif %}

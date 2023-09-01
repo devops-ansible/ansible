@@ -1,0 +1,15 @@
+ansible>=5.6.0
+ansible-core>=2.12.4
+bcrypt
+passlib
+click
+requests
+urllib3
+netaddr
+pycountry
+packaging
+pre-commit
+jmespath
+tomlkit
+lxml
+beautifulsoup4
