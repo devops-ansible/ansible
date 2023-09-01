@@ -85,6 +85,11 @@
         name: docker_host
       when: docker_host is defined and docker_host
 
+    - name: 'install K3S node'
+      ansible.builtin.include_role:
+        name: k3s_host
+      when: k3s_host is defined and k3s_host
+
     - name: 'create users and give permissions'
       ansible.builtin.include_role:
         name: admin_user

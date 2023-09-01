@@ -1,0 +1,27 @@
+---
+
+# ensure symlink creation for k3s data storage locations
+
+- name: "variable shaping"
+  ansible.builtin.set_fact:
+    k3s_dest: "{{ item.k3s | regex_replace('/$', '') }}"
+    k3s_parent: "{{ item.k3s | regex_replace('/$', '') | dirname }}"
+    k3s_src: "{{ item.src | regex_replace('/$', '') }}"
+
+- name: "Ensure parent dir of used data storage location {{ k3s_dest }}"
+  ansible.builtin.file:
+    path: "{{ k3s_parent }}"
+    state: "directory"
+    recurse: false
+    owner: root
+    group: root
+
+- name: "Create link to real storage for {{ k3s_dest }}"
+  ansible.builtin.file:
+    src: "{{ k3s_src }}"
+    dest: "{{ k3s_dest }}"
+    state: "link"
+    owner: root
+    group: root
+
+...
