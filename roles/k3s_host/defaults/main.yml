@@ -14,6 +14,9 @@ install_k3s:
 
 package_state: "latest"
 
+keep_k3sinstall: false
+keep_dir: "/root/.install"
+
 install_containernetworking_cni: true
 
 final_k3s_install_env: ""

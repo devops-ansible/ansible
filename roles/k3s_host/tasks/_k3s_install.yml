@@ -20,12 +20,42 @@
         path_dict: item
       when: item.src is defined
 
+    - name: "Prepare download folder"
+      ansible.builtin.tempfile:
+        state: "directory"
+        suffix: "_k3s"
+      changed_when: false
+      register: "tmp_dl_dir"
+      when: not keep_k3sinstall
+
+    - name: "Create install file keeping directory at {{ keep_dir }}"
+      ansible.builtin.file:
+        path:  "{{ keep_dir }}"
+        state: "directory"
+        mode:  "0755"
+        owner: "root"
+        group: "root"
+      when: keep_k3sinstall
+
+    - name: "Actual json object"
+      ansible.builtin.set_fact:
+        dl_path: "{{ tmp_dl_dir.path | default( keep_dir ) }}/k3s.install.sh"
+
+    - name: 'Download k3s install script'
+      ansible.builtin.get_url:
+        url: 'https://get.k3s.io'
+        dest: "{{ dl_path }}"
+        owner: "root"
+        group: "root"
+        mode: "0644"
+      changed_when: false
+
     - name: "Install k3s via install script"
       ansible.builtin.shell: |
         set -x
         pre_installed=$( k3s --version || echo "" )
         set -ex
-        curl -sfL https://get.k3s.io |{{ final_k3s_install_env }} sh -
+        cat {{ dl_path }} |{{ final_k3s_install_env }} sh -
         post_installed=$( k3s --version || echo "" )
         jq -c --null-input \
           --arg pre "${pre_installed}" \
@@ -33,6 +63,15 @@
           '{"pre": $pre, "post": $post}'
       register: inst
       changed_when: inst.stdout_lines[-1] | from_json | json_query('pre') != inst.stdout_lines[-1] | from_json | json_query('post')
+
+  always:
+
+    - name: Clean temporary directory
+      ansible.builtin.file:
+        path: "{{ tmp_dl_dir.path }}"
+        state: absent
+      changed_when: false
+      when: tmp_dl_dir.path is defined
 
 - name: "ensure `containerd` configuration file written out"
   # the containderd login to registries should be defined like that to be respected here:
