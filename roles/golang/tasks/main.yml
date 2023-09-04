@@ -82,7 +82,7 @@
       when: keep_goinstall
 
     - name: 'Download go lang with version {{ gojson["tobeinstalled"] }}'
-      get_url:
+      ansible.builtin.get_url:
         url: 'https://go.dev/dl/{{ gojson["dlname"] }}'
         dest: "{{ dl_path }}/{{ dl_file }}"
         owner: "root"
