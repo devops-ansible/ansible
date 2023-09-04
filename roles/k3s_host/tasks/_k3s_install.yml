@@ -2,6 +2,8 @@
 
 - name: "k3s installation"
   become: true
+  tags:
+    - k3s
   block:
 
     - name: "Ensure data real storage locations"
@@ -91,6 +93,8 @@
   #       username: "@@@@@"
   #       password: "*****"
   become: true
+  tags:
+    - k3s
   block:
 
     - name: "check path file existence {{ containerd_config_path }}"

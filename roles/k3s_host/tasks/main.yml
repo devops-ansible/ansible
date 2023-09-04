@@ -12,20 +12,33 @@
   when:
     - k3s_install_env is defined
     - k3s_install_env | length > 0
+  tags:
+    - k3s
 
 - name: "Install all prerequisite tools needed for this install routine"
   ansible.builtin.package:
     name: "{{ item.name }}"
     state: "{{ item.state | default( package_state) }}"
   with_items: "{{ install_k3s.prerequisites }}"
+  tags:
+    - k3s
+    - packages
 
 - name: "Install k3s"
   ansible.builtin.include_tasks: _k3s_install.yml
+  tags:
+    - k3s
 
 - name: "Install CNI"
   ansible.builtin.include_tasks: _k3s_cni.yml
+  tags:
+    - k3s
+    - cni
 
 - name: "Install nerdctl"
   ansible.builtin.include_tasks: _k3s_nerdctl.yml
+  tags:
+    - k3s
+    - nerdctl
 
 ...

@@ -2,6 +2,9 @@
 
 - name: "nerdctl installation"
   become: true
+  tags:
+    - nerdctl
+    - k3s
   block:
 
     - name: "nerdctl – release"

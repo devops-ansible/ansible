@@ -3,6 +3,9 @@
 - name: "CNI installation"
   become: true
   when: install_containernetworking_cni
+  tags:
+    - k3s
+    - cni
   block:
 
     - name: "Ensure GoLang installed"
