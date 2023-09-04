@@ -10,6 +10,7 @@ install_k3s:
     - name: "software-properties-common"
     - name: "python3-pip"
     - name: "jq"
+    - name: "apache2-utils"
 
 package_state: "latest"
 
@@ -32,7 +33,8 @@ containerd_arch_map:
   x86_64: "amd64"
   aarch64: "arm64"
 
-containerd_config_path: "/etc/containerd/config.toml"
+containerd_config_path: "/var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl"
+k3s_default_containerd_config_path: "/var/lib/rancher/k3s/agent/etc/containerd/config.toml"
 nerdctl_config_path: "/etc/nerdctl/nerdctl.toml"
 
 nerdctl_config:

@@ -1,0 +1,144 @@
+---
+
+- name: "nerdctl installation"
+  become: true
+  block:
+
+    - name: "nerdctl – release"
+      uri:
+        url: "https://api.github.com/repos/containerd/nerdctl/releases/{{ version }}"
+        return_content: true
+      register: nerdctl_info
+      check_mode: false
+      vars:
+        n_version: "{{ k3s_nerdctl_version }}"
+        n_tag: "tags/v{{ k3s_nerdctl_version }}"
+        version: "{{ (k3s_nerdctl_version == 'latest') | ternary(n_version, n_tag) }}"
+
+    - name: "nerdctl – release data"
+      ansible.builtin.set_fact:
+        nerdctl_version: "{{ tag }}"
+        nerdctl_asset: "{{ nerdctl_info.json | json_query(jq_binary) | first }}"
+        nerdctl_chksum_asset: "{{ chksum_asset | combine(merge_chksum_asset) }}"
+      vars:
+        tag: "{{ nerdctl_info.json.tag_name }}"
+        version: "{{ tag | regex_replace('^v', '') }}"
+        bin: "nerdctl-full-{{ version }}-linux-{{ containerd_arch }}.tar.gz"
+        jq_binary: "assets[?name==`{{ bin }}`]"
+        jq_chksum: "assets[?name==`SHA256SUMS`]"
+        chksum_asset: "{{ nerdctl_info.json | json_query(jq_chksum) | first }}"
+        merge_chksum_asset:
+            name: "{{ bin }}.sha256sums"
+
+    - name: "Create temporary download directory"
+      ansible.builtin.tempfile:
+        state: "directory"
+        suffix: "_nerdctl"
+      changed_when: false
+      register: "tmp_dl_dir"
+
+    - name: "Ensure nerdctl parent folder"
+      ansible.builtin.file:
+        path: "{{ k3s_nerdctl_path }}"
+        state: "directory"
+        recurse: true
+        owner: root
+        group: root
+
+    - name: "Download nerdctl"
+      get_url:
+        url: "{{ item.browser_download_url }}"
+        dest: "{{ tmp_dl_dir.path }}/{{ item.name | default('') }}"
+        owner: root
+        group: root
+        mode: 0644
+      loop:
+        - "{{ nerdctl_asset | default({}) }}"
+        - "{{ nerdctl_chksum_asset | default({}) }}"
+      changed_when: false
+      when:
+        - item.browser_download_url is defined
+
+    - name: "check nerdctl binaries checksum"
+      shell: |
+        set -ex
+        cd "{{ tmp_dl_dir.path }}"
+        grep {{ nerdctl_asset.name }} {{ nerdctl_chksum_asset.name }} | sha256sum -c - > /dev/null
+      register: rt
+      changed_when: rt.stdout_lines | length > 0
+      check_mode: false
+
+    - name: "unarchive nerdctl binaries"
+      ansible.builtin.unarchive:
+        src: "{{ tmp_dl_dir.path }}/{{ nerdctl_asset.name }}"
+        remote_src: true
+        dest: "{{ k3s_nerdctl_path }}"
+
+    - name: "prepare nerdctl config directory"
+      ansible.builtin.file:
+        path: "{{ nerdctl_config_path | dirname }}"
+        state: "directory"
+        recurse: true
+        owner: root
+        group: root
+
+    - name: "nerdctl configuration"
+      ansible.builtin.template:
+        dest: "{{ nerdctl_config_path }}"
+        src: "default/data.toml"
+      vars:
+        pre_toml: |
+          # This is /etc/nerdctl/nerdctl.toml .
+          # Unrelated to the daemon's /etc/containerd/config.toml .
+        data: "{{ nerdctl_config }}"
+
+    - name: "ensure nerdctl bin files in PATH"
+      ansible.builtin.blockinfile:
+        path: /etc/profile
+        marker: "# {mark} ANSIBLE MANAGED BLOCK (role {{ ansible_role_name }})"
+        block: |
+          export PATH="$PATH:{{ k3s_nerdctl_path }}/bin"
+        create: true
+
+    - name: "Create docker link to real storage for {{ k3s_dest }}"
+      ansible.builtin.file:
+        src: "{{ k3s_nerdctl_path }}/bin/nerdctl"
+        dest: "/usr/bin/docker"
+        state: "link"
+        owner: root
+        group: root
+
+    - name: "test nerdctl command"
+      ansible.builtin.shell: |
+        . /etc/profile
+        nerdctl run --rm hello-world
+      changed_when: false
+
+    - name: "Ensure `/root/.docker` directory exists"
+      ansible.builtin.file:
+        path: "/root/.docker"
+        state: "directory"
+        recurse: false
+        owner: root
+        group: root
+
+    - name: "deploy `/root/.docker/config.json` with registry credentials"
+      ansible.builtin.template:
+        dest: "/root/.docker/config.json"
+        src: "docker.config.j2"
+      register: containerd_config_changed
+
+    - name: "check if docker alias is reachable"
+      ansible.builtin.command: "which docker"
+      changed_when: false
+
+  always:
+
+    - name: Clean temporary directory
+      ansible.builtin.file:
+        path: "{{ tmp_dl_dir.path }}"
+        state: absent
+      changed_when: false
+      when: tmp_dl_dir.path is defined
+
+...

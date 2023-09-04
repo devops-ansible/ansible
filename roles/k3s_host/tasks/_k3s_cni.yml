@@ -1,0 +1,38 @@
+---
+
+- name: "CNI installation"
+  become: true
+  when: install_containernetworking_cni
+  block:
+
+    - name: "Ensure GoLang installed"
+      ansible.builtin.include_role:
+        name: golang
+
+    - name: "fetch latest version"
+      ansible.builtin.set_fact:
+        cni_git_tag: "{{ ( lookup('ansible.builtin.url', 'https://api.github.com/repos/{{ cni_plugin_gitrepo }}/releases/latest', wantlist=False) | from_json )['tag_name'] }}"
+      when:
+        - cni_plugins_version == "latest"
+
+    - name: "fetch containernetworking plugins"
+      ansible.builtin.git:
+        repo: 'https://github.com/{{ item }}.git'
+        dest: "{{ cni_plugins_path }}"
+        version: "{{ cni_git_tag | default( cni_plugins_version ) }}"
+      with_items:
+        - "{{ cni_plugin_gitrepo }}"
+      register: cni_git_changed
+
+    - name: "install CNI plugins"
+      ansible.builtin.shell:
+        cmd: |
+          . /etc/profile
+          go get github.com/containernetworking/cni
+          go install github.com/containernetworking/cni/cnitool
+          cd {{ cni_plugins_path }}
+          ./build_linux.sh
+      when:
+        - cni_git_changed.changed
+
+...

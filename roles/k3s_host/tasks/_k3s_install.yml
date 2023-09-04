@@ -1,0 +1,125 @@
+---
+
+- name: "k3s installation"
+  become: true
+  block:
+
+    - name: "Ensure data real storage locations"
+      ansible.builtin.file:
+        path: "{{ item.src | default( item.k3s ) }}"
+        state: "directory"
+        recurse: false
+        owner: root
+        group: root
+      loop: "{{ k3s_data_dirs }}"
+
+    - name: "Ensure links of storage locations"
+      ansible.builtin.include_tasks: _k3s_linking.yml
+      loop: "{{ k3s_data_dirs }}"
+      vars:
+        path_dict: item
+      when: item.src is defined
+
+    - name: "Install k3s via install script"
+      ansible.builtin.shell: |
+        set -x
+        pre_installed=$( k3s --version || echo "" )
+        set -ex
+        curl -sfL https://get.k3s.io |{{ final_k3s_install_env }} sh -
+        post_installed=$( k3s --version || echo "" )
+        jq -c --null-input \
+          --arg pre "${pre_installed}" \
+          --arg post "${post_installed}" \
+          '{"pre": $pre, "post": $post}'
+      register: inst
+      changed_when: inst.stdout_lines[-1] | from_json | json_query('pre') != inst.stdout_lines[-1] | from_json | json_query('post')
+
+- name: "ensure `containerd` configuration file written out"
+  # the containderd login to registries should be defined like that to be respected here:
+  #
+  # container_registries:
+  #   - url: "docker.io"
+  #     auth:
+  #       username: "@@@@@"
+  #       password: "*****"
+  #   - url: "localhost:5555"
+  #     tls:
+  #       # better than that is to use `containerd_registry_tls_config_path` variable
+  #       # and configure tls ignorance over there. see e.g.
+  #       # https://medium.com/@schottz/how-to-skip-tls-verify-fot-internal-registry-on-containerd-e039887bcb83
+  #       insecure_skip_verify = true
+  #     auth:
+  #       username: "@@@@@"
+  #       password: "*****"
+  become: true
+  block:
+
+    - name: "check path file existence {{ containerd_config_path }}"
+      ansible.builtin.stat:
+        path: "{{ containerd_config_path }}"
+      register: contd_conf_ex
+      changed_when: false
+
+    # - name: "get current config from existing config file"
+    #   ansible.builtin.command: "cat {{ containerd_config_path }}"
+    #   register: contd_conf1
+    #   when: contd_conf_ex.stat.exists
+
+    - name: "ensure directory for config file {{ containerd_config_path | dirname }}"
+      ansible.builtin.file:
+        path: "{{ containerd_config_path | dirname }}"
+        state: "directory"
+        recurse: true
+        owner: root
+        group: root
+      when: not contd_conf_ex.stat.exists
+
+    # - name: "fetch default config for containerd"
+    #   # ansible.builtin.command: "{{ k3s_nerdctl_path }}/bin/containerd config default"
+    #   register: contd_conf
+    #   changed_when: false
+    #   check_mode: false
+    #   # when: not contd_conf_ex.stat.exists
+
+    - name: gather information
+      ansible.builtin.set_fact:
+        containerd_registry_configs: "{{ containerd_registry_configs | default( {} ) | ansible.builtin.combine( { item.pop('url'): item } ) }}"
+      no_log: true
+      with_items: "{{ container_registries }}"
+      when:
+        - container_registries is defined
+        - container_registries | length > 0
+
+    - name: "prepare enriching of containerd config"
+      ansible.builtin.set_fact:
+        json_conf:
+          plugins:
+            io.containerd.grpc.v1.cri:
+              registry:
+                # config_path e.g. could be `/etc/containerd/certs.d`
+                config_path: '{{ containerd_registry_tls_config_path | default( "" ) }}'
+                configs: "{{ containerd_registry_configs | default( {} ) }}"
+      when:
+        - containerd_registry_configs is defined
+
+    # - name: "enrich containerd config"
+    #   ansible.builtin.set_fact:
+    #     contd_conf: "{{ ( contd_conf.stdout | from_toml ) | ansible.builtin.combine( ( json_conf | default( {} ) ), recursive=true ) }}"
+
+    - name: "write out containerd configuration to {{ containerd_config_path }}"
+      ansible.builtin.template:
+        dest: "{{ containerd_config_path }}"
+        src: "default/data.toml"
+      vars:
+        data: "{{ json_conf }}"
+      register: containerd_config_changed
+      when: json_conf is defined
+
+    - name: "restart k3s"
+      ansible.builtin.systemd:
+        state: restarted
+        daemon_reload: true
+        name: k3s
+      when: containerd_config_changed.changed
+
+...
