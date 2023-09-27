@@ -9,7 +9,6 @@
       . /etc/profile
       _goversrx="^.*(go[0-9]+\.[0-9]+\.[0-9]+).*$"
       goloc="$( which go )"
-      echo ${goloc}
       if [ $? == 0 ]; then
         current=$( go version | sed -E "s/${_goversrx}/\1/g" )
       fi
@@ -22,7 +21,6 @@
         tobeinstalled="${installversion}"
       fi
       dlname="${tobeinstalled}.linux-{{ host_arch }}.tar.gz"
-      # TODO: which go => check below when placing /etc/profile if valid golang_path!
       jq -c --null-input \
         --arg cur "${current:-}" \
         --arg tobeinstalled "${tobeinstalled}" \

@@ -1,0 +1,14 @@
+#!/usr/bin/env ansible-playbook
+---
+
+###
+## Licenced under CC-BY
+###
+
+- name: install golang on host
+  hosts: 'all:!localhost'
+  become: true
+  roles:
+    - golang
+
+...
