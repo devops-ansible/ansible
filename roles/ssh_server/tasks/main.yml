@@ -59,6 +59,12 @@
   notify:
     - restart ssh
 
+- name: enable SSH forwarding for sudo
+  lineinfile:
+    dest: /etc/sudoers
+    insertafter: '^#?\s*Defaults\s+env_keep\b'
+    line: 'Defaults    env_keep += "SSH_AUTH_SOCK"'
+
 # SSH has set by default to be started after network.target – but that
 # does not mean it always waits for the network to be up.
 # Since we limit the connection to the host IP, we have to wait until
