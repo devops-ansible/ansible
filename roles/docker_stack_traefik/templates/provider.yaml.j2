@@ -20,7 +20,7 @@ http:
         users:
           {#
            # adjust at least your password – for example by this docker command ('\'' needed for single quote escape ...):
-           # $$$   docker run -it --rm ubuntu bash -c 'apt-get update > /dev/null; apt-get install -y apache2-utils > /dev/null; echo; htpasswd -nbB '\''admin'\'' '\''Def12345'\'''
+           # $$$   docker run -it --rm php:apache bash -c 'echo; htpasswd -nbB '\''admin'\'' '\''Def12345'\''; echo'
            #
            #}{% for user, passhash in traefik_users.items() %}- '{{ user }}:{{ passhash }}'
           {% endfor %}
