@@ -12,12 +12,15 @@ global_ufw_rules:
   # allow SSH
   - rule: 'limit'
     port: "{{ ssh_port | default('22') }}"
+    comment: "Host SSH"
   # allow HTTP
   - rule: 'allow'
     port: '80'
+    comment: "HTTP on Host"
   # allow HTTPS
   - rule: 'allow'
     port: '443'
+    comment: "HTTPS on Host"
 
 package_state: latest
 

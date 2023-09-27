@@ -1,0 +1,14 @@
+#!/usr/bin/env ansible-playbook
+---
+
+###
+## Licenced under CC-BY
+###
+
+- name: install ufw firewall
+  hosts: 'all:!localhost'
+  become: true
+  roles:
+    - firewall
+
+...

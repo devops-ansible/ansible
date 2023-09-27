@@ -26,12 +26,7 @@
       delay: 10
 
     - name: Configure ufw rules
-      ufw:
-        rule:  "{{ item.rule }}"
-        port:  "{{ item.port | default( none ) }}"
-        proto: "{{ item.proto | default('tcp') }}"
-        src:   "{{ item.src | default('any') }}"
-        dest:  "{{ item.dest | default('any') }}"
+      ufw: "{{ item }}"
       with_items: "{{ ufw_rules }}"
       when: ( configure_ufw is not defined or configure_ufw | bool ) and ufw_rules is defined and ufw_rules | length > 0
       retries: 3
