@@ -1,0 +1,23 @@
+---
+
+- name: deploy containerd
+  ansible.builtin.include_tasks: _containerd.yml
+  tags:
+    - containerd
+
+- name: deploy runc
+  ansible.builtin.include_tasks: _runc.yml
+  tags:
+    - runc
+
+- name: deploy CNI
+  ansible.builtin.include_tasks: _cni.yml
+  tags:
+    - cni
+
+- name: deploy crictl
+  ansible.builtin.include_tasks: _crictl.yml
+  tags:
+    - crictl
+
+...

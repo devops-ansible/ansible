@@ -1,0 +1,266 @@
+---
+
+- name: "Prepare variables"
+  become: true
+  tags:
+    - containerd
+  block:
+
+    - name: "Get release information of containerd"
+      ansible.builtin.uri:
+        url: "https://api.github.com/repos/containerd/containerd/releases/{{ version }}"
+        return_content: true
+      register: containerd_info
+      check_mode: false
+      vars:
+        _version: "{{ containerd_version }}"
+        _tag: "tags/v{{ containerd_version }}"
+        version: "{{ (containerd_version == 'latest') | ternary(_version, _tag) }}"
+
+    - name: "Gather release information of containerd"
+      ansible.builtin.set_fact:
+        containerd_version: "{{ tag }}"
+        containerd_asset: "{{ containerd_info.json | json_query(jq_binary) | first }}"
+        containerd_chksum_asset: "{{ containerd_info.json | json_query(jq_chksum) | first }}"
+      vars:
+        tag: "{{ containerd_info.json.tag_name }}"
+        version: "{{ tag | regex_replace('^v', '') }}"
+        bin: "containerd-{{ version }}-linux-{{ host_arch }}.tar.gz"
+        jq_binary: "assets[?name==`{{ bin }}`]"
+        jq_chksum: "assets[?name==`{{ bin }}.sha256sum`]"
+
+- name: "Check installed version"
+  become: true
+  tags:
+    - containerd
+  block:
+
+    - name: "Version check"
+      ansible.builtin.shell:
+        cmd: |
+          # set -x
+          set -e
+          . /etc/profile
+          which_cmd=$( which containerd || echo "" )
+          cmd_dir=$( dirname ${which_cmd} || echo "")
+          cmd_version=$( ${which_cmd} --version | sed -E "s/^.*(v[0-9]+\.[0-9]+\.[0-9]+).*$/\1/g" || echo "")
+          jq -c --null-input \
+            --arg cur "${cmd_version}" \
+            --arg cmd_dir "${cmd_dir}" \
+            '{"current": $cur, "cmd_path": $cmd_dir}'
+      args:
+        executable: "/usr/bin/bash"
+      register: installed_version
+      changed_when: installed_version.stdout_lines[-1] | from_json | json_query('current') != containerd_version
+
+    - name: "Fail if installation dir missmatch"
+      ansible.builtin.debug:
+        msg: |
+          There seems to be installed another version of containerd in {{ cur_containerd.cmd_path }} instead of {{ containerd_path }}/bin.
+          Please fix and then re-run the Ansible playbook!
+      vars:
+        cur_containerd: "{{ installed_version.stdout_lines[-1] | from_json }}"
+      when:
+        - cur_containerd.cmd_path != (containerd_path ~ "/bin")
+        - cur_containerd.cmd_path != ""
+      failed_when:
+        - true
+
+- name: "Do the installation stuff"
+  become: true
+  tags:
+    - containerd
+  when:
+    - installed_version.changed
+  block:
+
+    - name: "Create temporary download directory"
+      ansible.builtin.tempfile:
+        state: "directory"
+        suffix: "_containerd"
+      changed_when: false
+      register: "tmp_dl_dir"
+      when: not keep_containerd_install
+
+    - name: "Actual download directory"
+      ansible.builtin.set_fact:
+        dl_path: "{{ tmp_dl_dir.path | default( containerd_keep_dir ) }}"
+
+    - name: "Ensure directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: "directory"
+        recurse: true
+        owner: root
+        group: root
+      with_items:
+        - "{{ containerd_path }}"
+        - "{{ dl_path }}"
+
+    - name: "Download containerd"
+      get_url:
+        url: "{{ item.browser_download_url }}"
+        dest: "{{ dl_path }}/{{ item.name | default('') }}"
+        owner: root
+        group: root
+        mode: 0644
+      no_log: true
+      loop:
+        - "{{ containerd_asset | default({}) }}"
+        - "{{ containerd_chksum_asset | default({}) }}"
+      changed_when: false
+      when:
+        - item.browser_download_url is defined
+
+    - name: "Check containerd binaries checksum"
+      shell: |
+        set -ex
+        cd "{{ dl_path }}"
+        grep {{ containerd_asset.name }} {{ containerd_chksum_asset.name }} | sha256sum -c - > /dev/null
+      register: rt
+      changed_when: rt.stdout_lines | length > 0
+      check_mode: false
+
+    - name: "Unarchive containerd binaries"
+      ansible.builtin.unarchive:
+        src: "{{ dl_path }}/{{ containerd_asset.name }}"
+        remote_src: true
+        dest: "{{ containerd_path }}"
+
+    - name: "Ensure containerd service parent folder"
+      ansible.builtin.file:
+        path: "{{ containerd_service_path | dirname }}"
+        state: "directory"
+        recurse: true
+        owner: root
+        group: root
+
+    - name: "Fetch containerd service definition"
+      ansible.builtin.get_url:
+        url: "https://raw.githubusercontent.com/containerd/containerd/{{ containerd_version }}/containerd.service"
+        dest: "{{ containerd_service_path }}"
+        backup: "{{ keep_containerd_service_backup }}"
+
+    - name: "Start and enable service containerd, if not started"
+      ansible.builtin.service:
+        name: containerd
+        state: started
+        enabled: true
+        daemon_reload: true
+
+  always:
+
+    - name: "Clean temporary directory"
+      ansible.builtin.file:
+        path: "{{ tmp_dl_dir.path }}"
+        state: absent
+      changed_when: false
+      when: tmp_dl_dir.path is defined
+
+
+- name: "Ensure `containerd` configuration file written out"
+  # the containderd login to registries should be defined like that to be respected here:
+  #
+  # container_registries:
+  #   - url: "docker.io"
+  #     auth:
+  #       username: "@@@@@"
+  #       password: "*****"
+  #   - url: "localhost:5555"
+  #     tls:
+  #       # better than that is to use `containerd_registry_tls_config_path` variable
+  #       # and configure tls ignorance over there. see e.g.
+  #       # https://medium.com/@schottz/how-to-skip-tls-verify-fot-internal-registry-on-containerd-e039887bcb83
+  #       insecure_skip_verify = true
+  #     auth:
+  #       username: "@@@@@"
+  #       password: "*****"
+  become: true
+  tags:
+    - containerd
+  block:
+
+    - name: "Fetch default config for containerd"
+      ansible.builtin.command: "{{ containerd_path }}/bin/containerd config default"
+      register: contd_conf
+      changed_when: false
+      check_mode: false
+
+    - name: "Set default containerd config"
+      ansible.builtin.set_fact:
+        # ensure, the custom configs will be imported correctly
+        contd_conf: '{{ ( contd_conf.stdout | from_toml ) }}'
+
+    - name: "Gather information"
+      ansible.builtin.set_fact:
+        containerd_registry_configs: "{{ containerd_registry_configs | default( {} ) | ansible.builtin.combine( { item.pop('url'): item } ) }}"
+      no_log: true
+      with_items: "{{ container_registries }}"
+      when:
+        - container_registries is defined
+        - container_registries | length > 0
+
+    - name: "Prepare config for registry logins"
+      ansible.builtin.set_fact:
+        registry_conf:
+          plugins:
+            io.containerd.grpc.v1.cri:
+              registry:
+                # config_path e.g. could be `/etc/containerd/certs.d`
+                config_path: '{{ containerd_registry_tls_config_path | default( "" ) }}'
+                configs: "{{ containerd_registry_configs | default( {} ) }}"
+      when:
+        - containerd_registry_configs is defined
+
+    - name: "Combine all existing additional configs for containerd"
+      ansible.builtin.set_fact:
+        containerd_extra_config: "{{ registry_conf | default( {} ) | ansible.builtin.combine( containerd_extra_config | default( {} ), group_containerd_extra_config | default( {} ), host_containerd_extra_config | default( {} ), recursive=true) }}"
+
+    - name: "Enrich containerd config"
+      ansible.builtin.set_fact:
+        # ensure, the custom configs will be imported correctly
+        contd_conf: '{{ contd_conf | ansible.builtin.combine( ( { "imports": [ containerd_extra_config_path ] } ), recursive=true ) }}'
+      when: containerd_extra_config | length > 0
+
+    - name: "Ensure containerd config folder exists"
+      ansible.builtin.file:
+        path: "{{ item | dirname }}"
+        state: "directory"
+        recurse: true
+        owner: root
+        group: root
+      with_items:
+        - "{{ containerd_config_path }}"
+        - "{{ containerd_extra_config_path }}"
+
+    - name: "Write out containerd configuration to main config file {{ containerd_config_path }}"
+      ansible.builtin.template:
+        dest: "{{ containerd_config_path }}"
+        src: "default/data.toml"
+      vars:
+        data: "{{ contd_conf }}"
+      register: containerd_main_config
+
+    - name: "Write out additional containerd configuration"
+      ansible.builtin.template:
+        dest: "{{ containerd_extra_config_path }}"
+        src: "default/data.toml"
+      vars:
+        data: "{{ containerd_extra_config }}"
+      register: containerd_additional_configs
+      when: containerd_extra_config | length > 0
+
+    - name: "Remove extra config"
+      ansible.builtin.file:
+        path: "{{ containerd_extra_config_path }}"
+        state: absent
+      when: containerd_extra_config | length == 0
+
+    - name: "Reload service containerd due to config changes"
+      ansible.builtin.service:
+        name: containerd
+        state: restarted
+      when:
+        - containerd_main_config.changed or containerd_additional_configs.changed
+
+...

@@ -1,0 +1,136 @@
+---
+
+- name: "Prepare variables"
+  become: true
+  tags:
+    - runc
+  block:
+
+    - name: "Get release information of runc"
+      ansible.builtin.uri:
+        url: "https://api.github.com/repos/opencontainers/runc/releases/{{ version }}"
+        return_content: true
+      register: runc_info
+      check_mode: false
+      vars:
+        _version: "{{ runc_version }}"
+        _tag: "tags/v{{ runc_version }}"
+        version: "{{ (runc_version == 'latest') | ternary(_version, _tag) }}"
+
+    - name: "Gather release information of runc"
+      ansible.builtin.set_fact:
+        runc_version: "{{ tag | regex_replace('^v', '') }}"
+        runc_asset: "{{ runc_info.json | json_query(jq_binary) | first }}"
+        runc_chksum_asset: "{{ runc_info.json | json_query(jq_chksum) | first }}"
+      vars:
+        tag: "{{ runc_info.json.tag_name }}"
+        bin: "runc.{{ host_arch }}"
+        jq_binary: "assets[?name==`{{ bin }}`]"
+        jq_chksum: "assets[?name==`runc.sha256sum`]"
+
+- name: "Check installed version"
+  become: true
+  tags:
+    - runc
+  block:
+
+    - name: "Version check"
+      ansible.builtin.shell:
+        cmd: |
+          # set -x
+          set -e
+          . /etc/profile
+          which_cmd=$( which runc || echo "" )
+          cmd_version=$( ${which_cmd} --version | sed -E 's/^.*runc version ([0-9]+\.[0-9]+\.[0-9]+).*$/\1/g;t;d' || echo "")
+          jq -c --null-input \
+            --arg cur "${cmd_version}" \
+            --arg which_cmd "${which_cmd}" \
+            '{"current": $cur, "which_cmd": $which_cmd}'
+      args:
+        executable: "/usr/bin/bash"
+      register: installed_version
+      changed_when: installed_version.stdout_lines[-1] | from_json | json_query('current') != runc_version
+
+    - name: "Fail if installation dir missmatch"
+      ansible.builtin.debug:
+        msg: |
+          There seems to be installed another version of runc at {{ cur_runc.which_cmd }} instead of {{ runc_path }}.
+          Please fix and then re-run the Ansible playbook!
+      vars:
+        cur_runc: "{{ installed_version.stdout_lines[-1] | from_json }}"
+      when:
+        - cur_runc.which_cmd != runc_path
+        - cur_runc.which_cmd != ""
+      failed_when:
+        - true
+
+- name: "Do the installation stuff"
+  become: true
+  tags:
+    - runc
+  when:
+    - installed_version.changed
+  block:
+
+    - name: "Create temporary download directory"
+      ansible.builtin.tempfile:
+        state: "directory"
+        suffix: "_runc"
+      changed_when: false
+      register: "tmp_dl_dir"
+      when: not keep_runc_install
+
+    - name: "Actual download directory"
+      ansible.builtin.set_fact:
+        dl_path: "{{ tmp_dl_dir.path | default( runc_keep_dir ) }}"
+
+    - name: "Ensure directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: "directory"
+        recurse: true
+        owner: root
+        group: root
+      with_items:
+        - "{{ runc_path | dirname }}"
+        - "{{ dl_path }}"
+
+    - name: "Download runc"
+      get_url:
+        url: "{{ item.browser_download_url }}"
+        dest: "{{ dl_path }}/{{ item.name | default('') }}"
+        owner: root
+        group: root
+        mode: 0644
+      no_log: true
+      loop:
+        - "{{ runc_asset | default({}) }}"
+        - "{{ runc_chksum_asset | default({}) }}"
+      changed_when: false
+      when:
+        - item.browser_download_url is defined
+
+    - name: "Check runc binaries checksum"
+      shell: |
+        set -ex
+        cd "{{ dl_path }}"
+        grep {{ runc_asset.name }} {{ runc_chksum_asset.name }} | sha256sum -c - > /dev/null
+      register: rt
+      changed_when: rt.stdout_lines | length > 0
+      check_mode: false
+
+    - name: "Install binary"
+      ansible.builtin.shell:
+        cmd: |
+          install -m 755 "{{ dl_path }}/{{ runc_asset.name }}" "{{ runc_path }}"
+
+  always:
+
+    - name: "Clean temporary directory"
+      ansible.builtin.file:
+        path: "{{ tmp_dl_dir.path }}"
+        state: absent
+      changed_when: false
+      when: tmp_dl_dir.path is defined
+
+...

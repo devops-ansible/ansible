@@ -1,0 +1,10 @@
+---
+
+# ansible_arch to release arch mapping
+host_arch: >-
+  {{ host_arch_map[ansible_architecture] | default(ansible_architecture) }}
+host_arch_map:
+  x86_64: "amd64"
+  aarch64: "arm64"
+
+...

@@ -1,0 +1,165 @@
+---
+
+- name: "Prepare variables"
+  become: true
+  tags:
+    - crictl
+  block:
+
+    - name: "Get release information of crictl"
+      ansible.builtin.uri:
+        url: "https://api.github.com/repos/kubernetes-sigs/cri-tools/releases/{{ version }}"
+        return_content: true
+      register: crictl_info
+      check_mode: false
+      vars:
+        _version: "{{ crictl_version }}"
+        _tag: "tags/v{{ crictl_version }}"
+        version: "{{ (crictl_version == 'latest') | ternary(_version, _tag) }}"
+
+    - name: "Gather release information of crictl"
+      ansible.builtin.set_fact:
+        crictl_version: "{{ tag }}"
+        crictl_asset: "{{ crictl_info.json | json_query(jq_binary) | first }}"
+        crictl_chksum_asset: "{{ crictl_info.json | json_query(jq_chksum) | first }}"
+      vars:
+        tag: "{{ crictl_info.json.tag_name }}"
+        bin: "crictl-{{ tag }}-linux-{{ host_arch }}.tar.gz"
+        jq_binary: "assets[?name==`{{ bin }}`]"
+        jq_chksum: "assets[?name==`{{ bin }}.sha256`]"
+
+- name: "Check installed version"
+  become: true
+  tags:
+    - crictl
+  block:
+
+    - name: "Version check"
+      ansible.builtin.shell:
+        cmd: |
+          # set -x
+          set -e
+          . /etc/profile
+          which_cmd=$( which crictl || echo "" )
+          cmd_version=$( ${which_cmd} --version | sed -E "s/^.*(v[0-9]+\.[0-9]+\.[0-9]+).*$/\1/g" || echo "")
+          jq -c --null-input \
+            --arg cur "${cmd_version}" \
+            --arg which_cmd "${which_cmd}" \
+            '{"current": $cur, "which_cmd": $which_cmd}'
+      args:
+        executable: "/usr/bin/bash"
+      register: installed_version
+      changed_when: installed_version.stdout_lines[-1] | from_json | json_query('current') != crictl_version
+
+    - name: "Fail if installation dir missmatch"
+      ansible.builtin.debug:
+        msg: |
+          There seems to be installed another version of crictl at {{ cur_crictl.which_cmd | dirname }} instead of {{ crictl_path }}.
+          Please fix and then re-run the Ansible playbook!
+      vars:
+        cur_crictl: "{{ installed_version.stdout_lines[-1] | from_json }}"
+      when:
+        - cur_crictl.which_cmd | dirname != crictl_path
+        - cur_crictl.which_cmd != ""
+      failed_when:
+        - true
+
+- name: "Do the installation stuff"
+  become: true
+  tags:
+    - crictl
+  when:
+    - installed_version.changed
+  block:
+
+    - name: "Create temporary download directory"
+      ansible.builtin.tempfile:
+        state: "directory"
+        suffix: "_crictl"
+      changed_when: false
+      register: "tmp_dl_dir"
+      when: not keep_crictl_install
+
+    - name: "Actual download directory"
+      ansible.builtin.set_fact:
+        dl_path: "{{ tmp_dl_dir.path | default( crictl_keep_dir ) }}"
+
+    - name: "Ensure directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: "directory"
+        recurse: true
+        owner: root
+        group: root
+      with_items:
+        - "{{ crictl_path }}"
+        - "{{ dl_path }}"
+
+    - name: "Download crictl"
+      get_url:
+        url: "{{ item.browser_download_url }}"
+        dest: "{{ dl_path }}/{{ item.name | default('') }}"
+        owner: root
+        group: root
+        mode: 0644
+      no_log: true
+      loop:
+        - "{{ crictl_asset | default({}) }}"
+        - "{{ crictl_chksum_asset | default({}) }}"
+      changed_when: false
+      when:
+        - item.browser_download_url is defined
+
+    - name: "Check crictl binaries checksum"
+      shell: |
+        set -ex
+        cd "{{ dl_path }}"
+        sha256sum {{ crictl_asset.name }} | grep -E "^$( cat {{ crictl_chksum_asset.name }} | tr -d '\n' )\s+{{ crictl_asset.name }}$" > /dev/null
+      register: rt
+      changed_when: rt.stdout_lines | length > 0
+      check_mode: false
+
+    - name: "Unarchive crictl binaries"
+      ansible.builtin.unarchive:
+        src: "{{ dl_path }}/{{ crictl_asset.name }}"
+        remote_src: true
+        dest: "{{ crictl_path }}"
+
+  always:
+
+    - name: Clean temporary directory
+      ansible.builtin.file:
+        path: "{{ tmp_dl_dir.path }}"
+        state: absent
+      changed_when: false
+      when: tmp_dl_dir.path is defined
+
+- name: "Check the configuration of crictl"
+  become: true
+  tags:
+    - crictl
+  block:
+
+    - name: "Get actual crictl config"
+      ansible.builtin.slurp:
+        src: "{{ crictl_config_file }}"
+      register: cur_crictl_config
+      changed_when:
+        - '"msg" in cur_crictl_config'
+        - '"file not found" in cur_crictl_config.msg'
+      failed_when: false
+
+    - name: "Gather config facts"
+      ansible.builtin.set_fact:
+        cur_crictl_config: "{{ cur_crictl_config['content'] | b64decode | from_yaml if not cur_crictl_config.changed else {} }}"
+        crictl_config: "{{ crictl_config | ansible.builtin.combine( group_crictl_config | default( {} ), host_crictl_config | default( {} ), recursive=true ) }}"
+
+    - name: "Adjust crictl configuration"
+      ansible.builtin.shell:
+        cmd: |
+          {{ crictl_path }}/crictl config --set {{ item.key }}={{ item.value }}
+      loop: "{{ crictl_config | dict2items }}"
+      when:
+        - ( item.key not in cur_crictl_config ) or ( cur_crictl_config[ item.key ] != item.value )
+
+...

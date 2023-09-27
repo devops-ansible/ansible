@@ -1,0 +1,14 @@
+#!/usr/bin/env ansible-playbook
+---
+
+###
+## Licenced under CC-BY
+###
+
+- name: install containerd and dependencies
+  hosts: 'all:!localhost'
+  become: true
+  roles:
+    - containerd
+
+...

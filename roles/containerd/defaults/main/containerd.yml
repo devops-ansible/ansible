@@ -1,0 +1,24 @@
+---
+
+containerd_version: "latest"
+# containerd_version: "1.7.6"
+
+containerd_config_path: "/etc/containerd/config.toml"
+# containerd_config_dir: "/etc/containerd/runtime"
+containerd_extra_config_path: "/etc/containerd/extra_config.toml"
+
+keep_containerd_install: false
+containerd_keep_dir: "/root/.install"
+
+keep_containerd_service_backup: true
+containerd_service_path: "/usr/local/lib/systemd/system/containerd.service"
+
+containerd_path: "/usr/local" # "/bin" will be appended to the path through the way, containerd packages the binaries
+
+# containerd_extra_config:
+#   version: 2
+#   plugins:
+#     "io.containerd.grpc.v1.cri":
+#       disable_apparmor: true # e.g. needed on specific switch hardware ...
+
+...

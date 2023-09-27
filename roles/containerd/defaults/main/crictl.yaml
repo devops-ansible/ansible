@@ -1,0 +1,20 @@
+---
+
+crictl_version: latest
+# crictl_version: "1.28.0"
+
+keep_crictl_install: false
+crictl_keep_dir: "/root/.install"
+
+crictl_path: "/usr/local/bin"
+
+crictl_config_file: "/etc/crictl.yaml"
+crictl_config:
+  runtime-endpoint: "unix:///run/containerd/containerd.sock"
+  image-endpoint: "unix:///run/containerd/containerd.sock"
+  # timeout: 0 # smalles accepted is 1(s) and everything below is interpreted as default (2(s))
+  # debug: false
+  # pull-image-on-create: false
+  # disable-pull-on-run: false
+
+...

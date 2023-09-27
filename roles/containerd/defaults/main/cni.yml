@@ -1,0 +1,7 @@
+---
+
+cni_plugins_version: "latest"
+cni_plugins_path: "/opt/cni"
+cni_plugin_gitrepo: "containernetworking/plugins"
+
+...
