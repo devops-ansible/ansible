@@ -8,7 +8,6 @@ containerd_config_path: "/etc/containerd/config.toml"
 containerd_extra_config_path: "/etc/containerd/extra_config.toml"
 
 keep_containerd_install: false
-containerd_keep_dir: "/root/.install"
 
 keep_containerd_service_backup: true
 containerd_service_path: "/usr/local/lib/systemd/system/containerd.service"

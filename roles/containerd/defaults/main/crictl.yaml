@@ -4,7 +4,6 @@ crictl_version: latest
 # crictl_version: "1.28.0"
 
 keep_crictl_install: false
-crictl_keep_dir: "/root/.install"
 
 crictl_path: "/usr/local/bin"
 

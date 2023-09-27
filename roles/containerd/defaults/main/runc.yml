@@ -4,7 +4,6 @@ runc_version: "latest"
 # runc_version: "1.1.9"
 
 keep_runc_install: false
-runc_keep_dir: "/root/.install"
 
 runc_path: "/usr/local/sbin/runc"
 

@@ -82,7 +82,7 @@
 
     - name: "Actual download directory"
       ansible.builtin.set_fact:
-        dl_path: "{{ tmp_dl_dir.path | default( crictl_keep_dir ) }}"
+        dl_path: "{{ tmp_dl_dir.path | default( keep_dir ) }}"
 
     - name: "Ensure directories"
       ansible.builtin.file:
