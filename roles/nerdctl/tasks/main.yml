@@ -1,0 +1,221 @@
+---
+
+- name: "Prepare variables"
+  become: true
+  tags:
+    - nerdctl
+  block:
+
+    - name: "Get release information of nerdctl"
+      ansible.builtin.uri:
+        url: "https://api.github.com/repos/containerd/nerdctl/releases/{{ version }}"
+        return_content: true
+      register: nerdctl_info
+      check_mode: false
+      vars:
+        n_version: "{{ nerdctl_version }}"
+        n_tag: "tags/v{{ nerdctl_version }}"
+        version: "{{ (nerdctl_version == 'latest') | ternary(n_version, n_tag) }}"
+
+    - name: "Gather release information of nerdctl"
+      ansible.builtin.set_fact:
+        nerdctl_version: "{{ tag }}"
+        nerdctl_asset: "{{ nerdctl_info.json | json_query(jq_binary) | first }}"
+        nerdctl_chksum_asset: "{{ chksum_asset | combine(merge_chksum_asset) }}"
+      vars:
+        tag: "{{ nerdctl_info.json.tag_name }}"
+        version: "{{ tag | regex_replace('^v', '') }}"
+        bin: "nerdctl-full-{{ version }}-linux-{{ host_arch }}.tar.gz"
+        jq_binary: "assets[?name==`{{ bin }}`]"
+        jq_chksum: "assets[?name==`SHA256SUMS`]"
+        chksum_asset: "{{ nerdctl_info.json | json_query(jq_chksum) | first }}"
+        merge_chksum_asset:
+            name: "{{ bin }}.sha256sums"
+
+- name: "Check installed version"
+  become: true
+  tags:
+    - nerdctl
+  block:
+
+    - name: "Version check"
+      ansible.builtin.shell:
+        cmd: |
+          # set -x
+          set -e
+          . /etc/profile
+          which_cmd=$( which nerdctl || echo "" )
+          cmd_dir=$( dirname ${which_cmd} || echo "")
+          cmd_version=$( ${which_cmd} --version | sed -E "s/^.*([0-9]+\.[0-9]+\.[0-9]+).*$/\1/g" || echo "")
+          jq -c --null-input \
+            --arg cur "${cmd_version}" \
+            --arg cmd_dir "${cmd_dir}" \
+            '{"current": $cur, "cmd_path": $cmd_dir}'
+      args:
+        executable: "/usr/bin/bash"
+      register: installed_version
+      changed_when: "'v' ~ installed_version.stdout_lines[-1] | from_json | json_query('current') != nerdctl_version"
+
+    - name: "Fail if installation dir missmatch"
+      ansible.builtin.fail:
+        msg: |
+          There seems to be installed another version of containerd in {{ cur_nerdctl.cmd_path }} instead of {{ nerdctl_path }}/bin.
+          Please fix and then re-run the Ansible playbook!
+      vars:
+        cur_nerdctl: "{{ installed_version.stdout_lines[-1] | from_json }}"
+      when:
+        - cur_nerdctl.cmd_path != (nerdctl_path ~ "/bin")
+        - cur_nerdctl.cmd_path != ""
+
+- name: "nerdctl installation"
+  become: true
+  tags:
+    - nerdctl
+  when:
+    - installed_version.changed
+  block:
+
+    - name: "Create temporary download directory"
+      ansible.builtin.tempfile:
+        state: "directory"
+        suffix: "_nerdctl"
+      changed_when: false
+      register: "tmp_dl_dir"
+      when: not keep_nerdctl_install
+
+    - name: "Actual download directory"
+      ansible.builtin.set_fact:
+        dl_path: "{{ tmp_dl_dir.path | default( keep_dir ) }}"
+
+    - name: "Ensure directories"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: "directory"
+        recurse: true
+        owner: root
+        group: root
+      with_items:
+        - "{{ nerdctl_path }}"
+        - "{{ dl_path }}"
+
+    - name: "Download nerdctl"
+      ansible.builtin.get_url:
+        url: "{{ item.browser_download_url }}"
+        dest: "{{ dl_path }}/{{ item.name | default('') }}"
+        owner: root
+        group: root
+        mode: 0644
+      no_log: true
+      loop:
+        - "{{ nerdctl_asset | default({}) }}"
+        - "{{ nerdctl_chksum_asset | default({}) }}"
+      changed_when: false
+      when:
+        - item.browser_download_url is defined
+
+    - name: "Get checksum contents"
+      ansible.builtin.slurp:
+        src: "{{ dl_path }}/{{ nerdctl_chksum_asset.name }}"
+      register: nerdctl_chksum
+
+    - name: "Fetch file stats of downloaded file"
+      ansible.builtin.stat:
+        path: "{{ dl_path }}/{{ nerdctl_asset.name }}"
+        checksum_algorithm: "sha256"
+      register: dlstats
+
+    - name: "Fetch expected checksum"
+      ansible.builtin.set_fact:
+        checksum: "{{ full_checksum_line | regex_search('^\\s*([^\\s]+)\\s+.*$', '\\1') | first }}"
+      vars:
+        full_checksum_line: "{{ nerdctl_chksum['content'] | b64decode | regex_search('^.*' ~ nerdctl_asset.name ~ '.*$', multiline=True) }}"
+
+    - name: "Fail if Checksum-Missmatch"
+      ansible.builtin.fail:
+        msg: |
+          The checksum of the downloaded file differs from the one we expected!
+          Expected:     {{ checksum }}
+          ... but got:  {{ dlstats.stat.checksum }}
+      when:
+        - checksum != dlstats.stat.checksum
+
+    - name: "Unarchive nerdctl binaries"
+      ansible.builtin.unarchive:
+        src: "{{ dl_path }}/{{ nerdctl_asset.name }}"
+        remote_src: true
+        dest: "{{ nerdctl_path }}"
+
+    - name: "Prepare nerdctl config directory"
+      ansible.builtin.file:
+        path: "{{ nerdctl_config_path | dirname }}"
+        state: "directory"
+        recurse: true
+        owner: root
+        group: root
+
+  always:
+
+    - name: Clean temporary directory
+      ansible.builtin.file:
+        path: "{{ tmp_dl_dir.path }}"
+        state: absent
+      changed_when: false
+      when: tmp_dl_dir.path is defined
+
+- name: "Run configuration and tests of `nerdctl`"
+  become: true
+  tags:
+    - nerdctl
+  block:
+
+    - name: "Configure nerdctl"
+      ansible.builtin.template:
+        dest: "{{ nerdctl_config_path }}"
+        src: "default/data.toml"
+      vars:
+        pre_toml: |
+          # This is /etc/nerdctl/nerdctl.toml .
+          # Unrelated to the daemon's /etc/containerd/config.toml .
+        data: "{{ nerdctl_config }}"
+
+    - name: "Ensure nerdctl bin files in PATH"
+      ansible.builtin.blockinfile:
+        path: /etc/profile
+        marker: "# {mark} ANSIBLE MANAGED BLOCK (role {{ ansible_role_name }})"
+        block: |
+          export PATH="$PATH:{{ nerdctl_path }}/bin"
+        create: true
+
+    - name: "Create docker link to real storage for {{ k3s_dest }}"
+      ansible.builtin.file:
+        src: "{{ nerdctl_path }}/bin/nerdctl"
+        dest: "/usr/bin/docker"
+        state: "link"
+        owner: root
+        group: root
+
+    - name: "Test nerdctl command"
+      ansible.builtin.shell: |
+        . /etc/profile
+        nerdctl run --rm hello-world
+      changed_when: false
+
+    - name: "Ensure `/root/.docker` directory exists"
+      ansible.builtin.file:
+        path: "/root/.docker"
+        state: "directory"
+        recurse: false
+        owner: root
+        group: root
+
+    - name: "deploy `/root/.docker/config.json` with registry credentials"
+      ansible.builtin.template:
+        dest: "/root/.docker/config.json"
+        src: "docker.config.j2"
+      register: containerd_config_changed
+
+    - name: "Check if docker alias is reachable"
+      ansible.builtin.command: "which docker"
+      changed_when: false
+
+...

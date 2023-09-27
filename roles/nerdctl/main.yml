@@ -1,0 +1,14 @@
+#!/usr/bin/env ansible-playbook
+---
+
+###
+## Licenced under CC-BY
+###
+
+- name: install nerdctl
+  hosts: 'all:!localhost'
+  become: true
+  roles:
+    - nerdctl
+
+...

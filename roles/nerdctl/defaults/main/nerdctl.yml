@@ -1,0 +1,23 @@
+---
+
+keep_nerdctl_install: false
+
+nerdctl_version: "latest"
+# nerdctl_version: "1.6.0"
+nerdctl_path: "/opt/nerdctl"
+
+nerdctl_config_path: "/etc/nerdctl/nerdctl.toml"
+
+nerdctl_config:
+  debug: false
+  debug_full: false
+  address: "unix:///run/containerd/containerd.sock"
+  # namespace: "k8s.io"
+  # snapshotter: "stargz"
+  # cgroup_manager: "cgroupfs"
+  hosts_dir:
+    - "/etc/containerd/certs.d"
+    - "/etc/docker/certs.d"
+  experimental: "{{ nerdctl_experimental | default( true ) }}"
+
+...

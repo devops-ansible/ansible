@@ -1,0 +1,8 @@
+{
+    "auths": {
+        {% for reg in container_registries %}"{{ reg.url }}": {
+        {% if reg.auth.username is defined and reg.auth.password is defined %}    "auth": "{{ ( reg.auth.username ~ ":" ~ reg.auth.password ) | ansible.builtin.b64encode }}"
+        {% else %}    {% for kvk, kvv in reg.auth.iteritems() %}"{{ kvk }}": "{{ kvv }}"{% if not loop.last %},{% endif %}
+            {% endfor %}{% endif %}}{% if not loop.last %},{% endif %}
+    {% endfor %}}
+}
