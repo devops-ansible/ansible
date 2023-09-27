@@ -21,7 +21,7 @@
       else
         tobeinstalled="${installversion}"
       fi
-      dlname="${tobeinstalled}.linux-{{ containerd_arch }}.tar.gz"
+      dlname="${tobeinstalled}.linux-{{ host_arch }}.tar.gz"
       # TODO: which go => check below when placing /etc/profile if valid golang_path!
       jq -c --null-input \
         --arg cur "${current:-}" \
