@@ -54,7 +54,7 @@
       changed_when: installed_version.stdout_lines[-1] | from_json | json_query('current') != containerd_version
 
     - name: "Fail if installation dir missmatch"
-      ansible.builtin.debug:
+      ansible.builtin.fail:
         msg: |
           There seems to be installed another version of containerd in {{ cur_containerd.cmd_path }} instead of {{ containerd_path }}/bin.
           Please fix and then re-run the Ansible playbook!
@@ -63,8 +63,6 @@
       when:
         - cur_containerd.cmd_path != (containerd_path ~ "/bin")
         - cur_containerd.cmd_path != ""
-      failed_when:
-        - true
 
 - name: "Do the installation stuff"
   become: true

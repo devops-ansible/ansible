@@ -52,7 +52,7 @@
       changed_when: installed_version.stdout_lines[-1] | from_json | json_query('current') != runc_version
 
     - name: "Fail if installation dir missmatch"
-      ansible.builtin.debug:
+      ansible.builtin.fail:
         msg: |
           There seems to be installed another version of runc at {{ cur_runc.which_cmd }} instead of {{ runc_path }}.
           Please fix and then re-run the Ansible playbook!
@@ -61,8 +61,6 @@
       when:
         - cur_runc.which_cmd != runc_path
         - cur_runc.which_cmd != ""
-      failed_when:
-        - true
 
 - name: "Do the installation stuff"
   become: true
