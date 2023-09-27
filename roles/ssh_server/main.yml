@@ -1,0 +1,14 @@
+#!/usr/bin/env ansible-playbook
+---
+
+###
+## Licenced under CC-BY
+###
+
+- name: prepare the server to meet SSH server definitions of this repo
+  hosts: 'all:!localhost'
+  become: true
+  roles:
+    - ssh_server
+
+...
