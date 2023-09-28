@@ -108,14 +108,29 @@
       when:
         - item.browser_download_url is defined
 
-    - name: "Check crictl binaries checksum"
-      shell: |
-        set -ex
-        cd "{{ dl_path }}"
-        sha256sum {{ crictl_asset.name }} | grep -E "^$( cat {{ crictl_chksum_asset.name }} | tr -d '\n' )\s+{{ crictl_asset.name }}$" > /dev/null
-      register: rt
-      changed_when: rt.stdout_lines | length > 0
-      check_mode: false
+    - name: "Get checksum contents"
+      ansible.builtin.slurp:
+        src: "{{ dl_path }}/{{ crictl_chksum_asset.name }}"
+      register: file_chksum_should
+
+    - name: "Fetch file stats of downloaded file"
+      ansible.builtin.stat:
+        path: "{{ dl_path }}/{{ crictl_asset.name }}"
+        checksum_algorithm: "sha256"
+      register: dlstats
+
+    - name: "Fetch expected checksum"
+      ansible.builtin.set_fact:
+        checksum: "{{ file_chksum_should['content'] | b64decode | regex_search('^.*' ~ crictl_asset.name ~ '.*$', multiline=True) }}"
+
+    - name: "Fail if Checksum-Missmatch"
+      ansible.builtin.fail:
+        msg: |
+          The checksum of the downloaded file differs from the one we expected!
+          Expected:     {{ checksum }}
+          ... but got:  {{ dlstats.stat.checksum }}
+      when:
+        - dlstats.stat.checksum | regex_search( '^\s*' ~ checksum ~ '\s+' ~ crictl_asset.name ~ '\s*$' )
 
     - name: "Unarchive crictl binaries"
       ansible.builtin.unarchive:

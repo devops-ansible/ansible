@@ -110,14 +110,31 @@
       when:
         - item.browser_download_url is defined
 
-    - name: "Check containerd binaries checksum"
-      shell: |
-        set -ex
-        cd "{{ dl_path }}"
-        grep {{ containerd_asset.name }} {{ containerd_chksum_asset.name }} | sha256sum -c - > /dev/null
-      register: rt
-      changed_when: rt.stdout_lines | length > 0
-      check_mode: false
+    - name: "Get checksum contents"
+      ansible.builtin.slurp:
+        src: "{{ dl_path }}/{{ containerd_chksum_asset.name }}"
+      register: file_chksum_should
+
+    - name: "Fetch file stats of downloaded file"
+      ansible.builtin.stat:
+        path: "{{ dl_path }}/{{ containerd_asset.name }}"
+        checksum_algorithm: "sha256"
+      register: dlstats
+
+    - name: "Fetch expected checksum"
+      ansible.builtin.set_fact:
+        checksum: "{{ file_chksum_is | regex_search('^\\s*([^\\s]+)\\s+.*$', '\\1') | first }}"
+      vars:
+        file_chksum_is: "{{ file_chksum_should['content'] | b64decode | regex_search('^.*' ~ containerd_asset.name ~ '.*$', multiline=True) }}"
+
+    - name: "Fail if Checksum-Missmatch"
+      ansible.builtin.fail:
+        msg: |
+          The checksum of the downloaded file differs from the one we expected!
+          Expected:     {{ checksum }}
+          ... but got:  {{ dlstats.stat.checksum }}
+      when:
+        - checksum != dlstats.stat.checksum
 
     - name: "Unarchive containerd binaries"
       ansible.builtin.unarchive:
