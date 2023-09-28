@@ -22,6 +22,7 @@
         nerdctl_version: "{{ tag }}"
         nerdctl_asset: "{{ nerdctl_info.json | json_query(jq_binary) | first }}"
         nerdctl_chksum_asset: "{{ chksum_asset | combine(merge_chksum_asset) }}"
+        nerdctl_config: "{{ nerdctl_config | ansible.builtin.combine( group_nerdctl_config | default( {} ), host_nerdctl_config | default( {} ), recursive=true)  }}"
       vars:
         tag: "{{ nerdctl_info.json.tag_name }}"
         version: "{{ tag | regex_replace('^v', '') }}"
