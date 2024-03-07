@@ -6,6 +6,7 @@
   set_fact:
     admins: "{{ admins + groupadmins | default([]) + hostadmins | default([]) }}"
     admin_usernames: "{{ role_global_admin_usernames + admin_usernames | default([]) }}"
+    keep_users: "{{ group_keep_users | default([]) + host_keep_users | default([]) }}"
     role_groups: "{{ user_groups + host_user_groups | default([]) + group_user_groups | default([]) }}"
 
 - name: 'fetch groups for users'
@@ -117,6 +118,7 @@
       # otherwise delete the user from the server by task `user`
       when:
         - "item.name not in admin_usernames"
+        - "item.name not in keep_users"
         - "item.name != lookup( 'env', 'USER' )"
         - "item.name != ansible_ssh_user"
 
