@@ -53,4 +53,6 @@ basic_toolset:
 basic_pip_toolset:
   - name: 'pip'
 
+ignore_basic_tools: []
+
 ...

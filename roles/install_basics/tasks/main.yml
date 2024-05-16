@@ -15,6 +15,8 @@
     name: "{{ item.name }}"
     state: "{{ item.state | default( package_state) }}"
   with_items: "{{ install_tools }}"
+  when:
+    - item not in ignore_basic_tools
   become: yes
 
 - name: ensure usage of Python3 on host

@@ -23,7 +23,7 @@
 
     - name: 'set hostname variable'
       ansible.builtin.set_fact:
-        hostname_var: "{{ fqdn_hn.split('.')[0] }}"
+        hostname_var: "{{ explicit_hostname | default( fqdn_hn.split('.')[0] ) }}"
 
     - name: 'change hostname'
       ansible.builtin.hostname:
