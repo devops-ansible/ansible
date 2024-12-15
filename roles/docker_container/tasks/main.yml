@@ -328,7 +328,6 @@
       networks:        "{{ container_networks }}"
       network_mode:    "{{ container.network_mode   | default ('bridge') }}"
       privileged:      "{{ container.privileged     | default( 'no' ) }}"
-      purge_networks:  "{{ container.purge_networks | default( true | bool ) }}"
       published_ports: "{{ container.aux_ports      | default( [] ) }}"
       recreate:        "{{ container.recreate       | default( cnt_recreate ) }}"
       restart_policy:  "{{ container.restart_policy | default( docker_restart_policy ) }}"
