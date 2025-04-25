@@ -80,6 +80,11 @@
       ansible.builtin.include_role:
         name: install_basics
 
+    - name: 'install libvirt'
+      ansible.builtin.include_role:
+        name: libvirt
+      when: libvirt_host is defined and libvirt_host
+
     - name: 'install docker tools'
       ansible.builtin.include_role:
         name: docker_host

@@ -102,10 +102,17 @@
         - admins is defined and admins | length > 0
         - item.name not in disallowed_users|default([])
 
-    - name: "Generate user data for all interactive users on the system"
-      get_users:
-        min_uid: "{{ security_min_interactive_uid }}"
-      register: interactive_user_list
+    - name: Retrieve user information
+      getent:
+        database: passwd
+        split: ':'
+
+    - name: "Build list of users with uid >= {{ security_min_interactive_uid }}"
+      set_fact:
+        interactive_user_list: "{{ interactive_user_list | default([]) + [item.key] }}"
+      when: "item.value[1] | int >= {{ security_min_interactive_uid }}"
+      with_dict:
+        "{{ getent_passwd }}"
 
     - name: "Delete user that shall not exist"
       user:
@@ -113,14 +120,14 @@
         state:  "absent"
         remove: yes
       # for each user within the list of interactive users
-      with_items: "{{ interactive_user_list.users }}"
+      with_items: "{{ interactive_user_list }}"
       # check if the name is still known in `admin_usernames`,
       # otherwise delete the user from the server by task `user`
       when:
-        - "item.name not in admin_usernames"
-        - "item.name not in keep_users"
-        - "item.name != lookup( 'env', 'USER' )"
-        - "item.name != ansible_ssh_user"
+        - "item not in admin_usernames"
+        - "item not in keep_users"
+        - "item != lookup( 'env', 'USER' )"
+        - "item != ansible_ssh_user"
 
     # The SSH keys for admin users / SSH users are stored within the file
     # `$Home/.ssh/authorized_keys` for each user by default. To centralize that

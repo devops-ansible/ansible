@@ -41,22 +41,23 @@
       command: "update-alternatives --install /usr/bin/python python {{ py3path.stdout }} 10"
       when: py2default
 
-- name: install pip packages, force upgrade
-  pip:
-    name: "{{ pip_list }}"
-    executable: pip3
-    state: latest
-  vars:
-    pip_list:
-      - pip
-      # - python3-keyczar
-      # - ansible
+# - name: install pip packages, force upgrade
+#   pip:
+#     name: "{{ pip_list }}"
+#     executable: pip3
+#     state: latest
+#   vars:
+#     pip_list:
+#       - pip
+#       # - python3-keyczar
+#       # - ansible
 
 - name: install pip packages, force upgrade
   pip:
     name: "{{ item.name }}"
     executable: pip3
     state: latest
+    break_system_packages: "{{ pip_break_system_packages | default('true') }}"
   with_items: "{{ install_pip_tools }}"
   become: yes
 

@@ -46,12 +46,11 @@ basic_toolset:
   - name: 'jq'
   - name: 'acl'
   - name: 'rsync'
-  - name: 'python-setuptools'
+  - name: 'python3-setuptools'
   - name: 'strace'
   - name: 'whois'
 
-basic_pip_toolset:
-  - name: 'pip'
+basic_pip_toolset: []
 
 ignore_basic_tools: []
 

@@ -1,0 +1,16 @@
+---
+
+- name: install the latest version of libvirt dependencies
+  package:
+    name: "{{ item.name }}"
+    state: "{{ item.state | default( package_state) }}"
+  with_items: "{{ install_libvirt_tools }}"
+  become: yes
+
+- name: Enable service libvirtd
+  ansible.builtin.service:
+    name: libvirtd
+    enabled: yes
+    state: started
+
+...

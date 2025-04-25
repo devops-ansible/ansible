@@ -1,0 +1,13 @@
+---
+
+package_state: 'latest'
+
+install_libvirt_tools:
+  - name: "qemu-kvm"
+  - name: "libvirt-daemon-system"
+  - name: "libvirt-clients"
+  - name: "bridge-utils"
+  - name: "virt-manager"
+  - name: "virtinst"
+
+...
